@@ -74,9 +74,9 @@ func main(){
 		} else if err == InvalidHash {
 			log.Fatalf("error: not endpoint with the specified hash was found")
 		} else {
-			log.Fatalf("sucessful! endpoint with hash value [%s] removed", *unblockFlag)
+			log.Println("sucessful! endpoint with hash value [%s] removed", *unblockFlag)
 		}
 	} else {
-		log.Fatalf("check -h flag for usage")
+		log.Println("check -h flag for usage")
 	}
 }
