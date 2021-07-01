@@ -5,9 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/BurntSushi/toml"
+	"github.com/fatih/color"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"time"
 )
 
@@ -16,9 +20,23 @@ var (
 	UnexpectedError = errors.New("error: unexpected error")
 	)
 
+type Conf struct {
+	LeakServer string `toml:"leak_server_address"`
+}
+var conf Conf
 
+func ValConfig(d *Conf) bool {
+	signalServerAddress, _ := regexp.Compile("^[a-zA-Z0-9\\-\\.]+:{0,1}\\d{0,5}$")
+	if !signalServerAddress.MatchString(d.LeakServer) {
+		color.Set(color.FgRed)
+		log.Println("error: leak_server_address invalid")
+		color.Unset()
+		os.Exit(1)
+	}
+	return true
+}
 func unblockEndpoint(hash string) error {
-	listEndpoint, _ := url.Parse("http://localhost:8080/unblock_endpoint")
+	listEndpoint, _ := url.Parse(fmt.Sprintf("http://%s/unblock_endpoint", conf.LeakServer))
 	client := http.Client{
 		Timeout: time.Hour,
 	}
@@ -43,7 +61,7 @@ func unblockEndpoint(hash string) error {
 }
 
 func listAllEndpoint() (map[string] string, error) {
-	listEndpoint, _ := url.Parse("http://localhost:8080/get_all_blocked_endpoints")
+	listEndpoint, _ := url.Parse(fmt.Sprintf("http://%s/unblock_endpoint", conf.LeakServer))
 	response, _ := http.Get(listEndpoint.String())
 	var responseMap = make(map[string] string)
 	err := json.NewDecoder(response.Body).Decode(&responseMap)
@@ -55,6 +73,50 @@ func listAllEndpoint() (map[string] string, error) {
 }
 
 func main(){
+
+	homePath := os.Getenv("HOME")
+	if homePath == "" {
+		color.Set(color.FgRed)
+		log.Println("error: HOME variable not found")
+		color.Unset()
+	}
+
+	appDir := homePath + "/.securum_exire"
+	_, err := os.Stat(appDir)
+	if os.IsNotExist(err) {
+		color.Set(color.FgRed)
+		log.Println("error: .securum_exire (app directory) doesn't exit")
+		color.Unset()
+		err = os.MkdirAll(appDir, os.ModePerm)
+		if err != nil {
+			color.Set(color.FgRed)
+			log.Println("error: unable to create a directory")
+			color.Unset()
+			os.Exit(1)
+		}
+	}
+	configFilePath := appDir + "/secexctl.config.toml"
+	_, err = os.Stat(configFilePath)
+	if os.IsNotExist(err) {
+		color.Set(color.FgRed)
+		log.Println("error: secexctl.config.toml doesn't exit")
+		color.Unset()
+		_, err = os.Create(configFilePath)
+		if err != nil {
+			color.Set(color.FgRed)
+			log.Println("error: unable to create signal_server.config.toml")
+			color.Unset()
+			os.Exit(1)
+		}
+	}
+
+	if _, err := toml.DecodeFile(configFilePath, &conf); err != nil {
+		color.Set(color.FgRed)
+		log.Println("error: unable to open signal_server.config.toml")
+		color.Unset()
+		os.Exit(1)
+	}
+	ValConfig(&conf)
 	list := flag.Bool("list", false, "list all the blocked endpoint")
 	unblockFlag := flag.String("unblock", "", "unblock the endpoint with the specified hash value")
 	flag.Parse()
